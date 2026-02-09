@@ -2,7 +2,7 @@
 struct Levenshtein<'a> {
     s1: &'a [char],
     s2: &'a [char],
-    dp: Vec<i64>,
+    dp: Vec<f64>,
 }
 
 impl<'a> Levenshtein<'a> {
@@ -11,7 +11,7 @@ impl<'a> Levenshtein<'a> {
         Self {
             s1,
             s2,
-            dp: vec![-1; s1.len() * s2.len()],
+            dp: vec![-1.0; s1.len() * s2.len()],
         }
     }
 
@@ -36,20 +36,26 @@ impl<'a> Levenshtein<'a> {
     /// ans = dist 0 0
     /// ```
     /// The wikipedia article explains a lot better: https://en.wikipedia.org/wiki/Levenshtein_distance
-    fn calculate(&mut self) -> usize {
-        self.process_actions(0, 0) as usize
+    ///
+    /// Here we add the modification, that changes are cost a lot (subsequent matches will be ignored)
+    /// also we may finish early (without additional cost if the first string) is empty (the needle), and
+    /// there is no cost at skipping a character in the second string
+    fn calculate(&mut self) -> f64 {
+        self.process_actions(0, 0)
     }
 
     /// Implementation of the algorithm described in [`calculate`] using a dynamic programming approach
-    fn process_actions(&mut self, pos1: usize, pos2: usize) -> i64 {
-        if pos1 == self.s1.len() || pos2 == self.s2.len() {
-            // End of both
-            return (self.s1.len() + self.s2.len() - pos1 - pos2) as i64;
+    fn process_actions(&mut self, pos1: usize, pos2: usize) -> f64 {
+        if pos1 == self.s1.len() {
+            return 0.0;
+        }
+        if pos2 == self.s2.len() {
+            return (self.s1.len() - pos1) as f64 * 1.01;
         }
 
         let idx = self.at(pos1, pos2);
 
-        if self.dp[idx] != -1 {
+        if self.dp[idx] > -0.5 {
             return self.dp[idx];
         }
 
@@ -57,10 +63,11 @@ impl<'a> Levenshtein<'a> {
             self.process_actions(pos1 + 1, pos2 + 1)
         } else {
             // TODO: Do not take into account things like repeated spaces
-            self.process_actions(pos1 + 1, pos2)
+            (self
+                .process_actions(pos1 + 1, pos2)
+                .min(self.process_actions(pos1 + 1, pos2 + 1) * 1.1)
+                + 1.0)
                 .min(self.process_actions(pos1, pos2 + 1))
-                .min(self.process_actions(pos1 + 1, pos2 + 1))
-                + 1
         };
 
         self.dp[idx] = res;
@@ -123,7 +130,7 @@ mod tests {
                 &"".chars().collect::<Vec<_>>(),
             )
             .calculate(),
-            1
+            1.01
         );
 
         assert_eq!(
@@ -132,7 +139,7 @@ mod tests {
                 &"b".chars().collect::<Vec<_>>(),
             )
             .calculate(),
-            1
+            0.0
         );
 
         assert_eq!(
@@ -141,7 +148,7 @@ mod tests {
                 &"b".chars().collect::<Vec<_>>(),
             )
             .calculate(),
-            1
+            1.0
         );
 
         assert_eq!(
@@ -150,7 +157,7 @@ mod tests {
                 &"a".chars().collect::<Vec<_>>(),
             )
             .calculate(),
-            0
+            0.0
         );
 
         assert_eq!(
@@ -159,7 +166,7 @@ mod tests {
                 &"hey".chars().collect::<Vec<_>>(),
             )
             .calculate(),
-            3
+            1.1 * (1.01 * 1.01) + 1.0
         );
 
         assert_eq!(
@@ -168,7 +175,7 @@ mod tests {
                 &"hello".chars().collect::<Vec<_>>(),
             )
             .calculate(),
-            1
+            1.0
         );
 
         assert_eq!(
@@ -177,25 +184,34 @@ mod tests {
                 &"heello".chars().collect::<Vec<_>>(),
             )
             .calculate(),
-            1
+            1.0
+        );
+
+        assert_eq!(
+            Levenshtein::new(
+                &"hhhello".chars().collect::<Vec<_>>(),
+                &"heeello".chars().collect::<Vec<_>>(),
+            )
+            .calculate(),
+            1.1 + 1.0
         );
 
         assert_eq!(
             Levenshtein::new(
                 &"firefox".chars().collect::<Vec<_>>(),
                 &"find fox".chars().collect::<Vec<_>>(),
-            ) // n->r, r->d,
+            ) // n->r, e->d,
             .calculate(),
-            3
+            1.1 + 1.0
         );
 
         assert_eq!(
             Levenshtein::new(
                 &"firefox-idk".chars().collect::<Vec<_>>(),
                 &"firefox_idk".chars().collect::<Vec<_>>(),
-            ) // n->r, r->d,
+            )
             .calculate(),
-            3
+            1.0
         );
     }
 }
