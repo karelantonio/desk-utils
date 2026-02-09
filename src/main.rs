@@ -1,12 +1,12 @@
+use crate::discover::{DesktopEntry, desktop_apps};
 use core::{cmp::Ordering, default::Default};
-
 use env_logger::Env;
 use iced::{
-    Element,
-    widget::{column, keyed::Column, pick_list, scrollable, text, text_input},
+    Color, Element, Length, Padding, Task, Theme,
+    border::radius,
+    color,
+    widget::{Id, column, container, operation, scrollable, text, text_input},
 };
-
-use crate::discover::{DesktopEntry, desktop_apps};
 
 mod discover;
 mod fuzzy;
@@ -17,7 +17,10 @@ fn main() -> iced::Result {
             .filter_or("TYLA_LOG", "warn")
             .write_style("TYLA_LOG_STYLE"),
     );
-    iced::run(App::update, App::view)
+    iced::application(App::new, App::update, App::view)
+        .title("Tiny Launcher")
+        .theme(App::theme)
+        .run()
 }
 
 #[derive(Debug, Clone)]
@@ -31,6 +34,7 @@ struct App {
     entries: Vec<DesktopEntry>,
     strings: Vec<Vec<char>>,
     results: Vec<(f64, usize)>,
+    search_box_id: Id,
 }
 
 impl Default for App {
@@ -46,11 +50,22 @@ impl Default for App {
             entries: entr,
             strings,
             results: Vec::new(),
+            search_box_id: Id::new("search_box"),
         }
     }
 }
 
 impl App {
+    fn new() -> (Self, Task<Msg>) {
+        let slf = Self::default();
+        let id = slf.search_box_id.clone();
+        (slf, operation::focus(id))
+    }
+
+    fn theme(&self) -> Theme {
+        Theme::Dracula
+    }
+
     fn do_fuzzy_search(&mut self, txt: &str) {
         // Perform a search if are different
         // There are not a lot of entries, so the O(n*maxlen*k) runtime is negligible
@@ -87,6 +102,43 @@ impl App {
         }
     }
 
+    fn search_box(&self) -> impl Into<Element<'_, Msg>> {
+        container(
+            text_input("Search term here...", &self.search_text)
+                .on_input(Msg::SearchTextChanged)
+                .width(Length::Fill)
+                .style(|thm, st| {
+                    let defstyle = text_input::default(thm, st);
+                    text_input::Style {
+                        border: defstyle.border.width(0),
+                        background: iced::Background::Color(Color::TRANSPARENT),
+                        ..defstyle
+                    }
+                })
+                .id(self.search_box_id.clone()),
+        )
+        .padding(Padding {
+            top: 16.0,
+            right: 16.0,
+            bottom: 16.0,
+            left: 16.0,
+        })
+        .style(|theme| {
+            let palette = theme.extended_palette();
+
+            container::Style {
+                background: Some(palette.background.weak.color.into()),
+                text_color: Some(palette.background.weak.text),
+                border: iced::Border {
+                    color: color!(0),
+                    width: 0.0,
+                    radius: radius(28),
+                },
+                ..Default::default()
+            }
+        })
+    }
+
     fn result_item(&self, (perc, idx): &(f64, usize)) -> Element<'_, Msg> {
         text(format!(
             "{:.0} - {}",
@@ -98,8 +150,9 @@ impl App {
 
     fn view(&self) -> Element<'_, Msg> {
         column![
-            text_input("Search term here...", &self.search_text).on_input(Msg::SearchTextChanged),
+            container(self.search_box()).padding(8),
             scrollable(column![].extend(self.results.iter().map(|arg| self.result_item(arg))))
+                .width(Length::Fill)
         ]
         .into()
     }
