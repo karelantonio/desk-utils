@@ -1,4 +1,4 @@
-use core::ffi::CStr;
+use core::{convert::From, ffi::CStr};
 use std::{
     ffi::OsStr,
     fs::{DirEntry, File},
@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::bail;
+use home_dir::HomeDirExt;
 
 /// Get the XDG data directories from the environment or return the default ones
 fn xdg_data_dirs() -> Vec<String> {
@@ -37,8 +38,9 @@ pub struct DesktopEntry {
 pub fn desktop_apps() -> Vec<DesktopEntry> {
     let mut apps = Vec::new();
     for dir in xdg_data_dirs() {
-        let fullpath = format!("{dir}/applications");
-        log::debug!("Checking directory '{fullpath}' for desktop entries");
+        let fullpath = PathBuf::from(format!("{dir}/applications"));
+        let fullpath = fullpath.expand_home().unwrap_or(fullpath);
+        log::debug!("Checking directory '{fullpath:?}' for desktop entries");
         let files = match std::fs::read_dir(fullpath) {
             Ok(dirs) => dirs,
             Err(err) => {
