@@ -1,3 +1,4 @@
+// A (modified?) version of the levenshtein distance, for calculating how similar are two strings
 struct Levenshtein<'a> {
     s1: &'a [char],
     s2: &'a [char],
@@ -5,6 +6,7 @@ struct Levenshtein<'a> {
 }
 
 impl<'a> Levenshtein<'a> {
+    /// New instance
     fn new(s1: &'a [char], s2: &'a [char]) -> Self {
         Self {
             s1,
@@ -13,10 +15,32 @@ impl<'a> Levenshtein<'a> {
         }
     }
 
+    /// So, the algorithm is as follows:
+    /// we have two pointers, `p1` and `p1` each one pointing to some position
+    /// in each string, the distance to transform the substrings `S1[p1...]` and `S2[p2..]` to match
+    /// can be calculated as follows:
+    ///
+    /// ```text
+    /// dist p1 p1 =
+    ///     if p1==len(S1) or p2==len(S2) then
+    ///         // Remaining chars
+    ///         (len(S1) - p1) + (len(S2) - p2)
+    ///     else if S1[p1]==S2[p2]
+    ///         // Same char
+    ///         dist (p1+1) (p2+1)
+    ///     else
+    ///         // No distinct, take the minimum of
+    ///         // inserting/deleting in S1, in S2 of change one character
+    ///         1 + min [dist (p1+1) p2,  dist p1 (p2+1),  dist (p1+1) (p2+1)]
+    ///
+    /// ans = dist 0 0
+    /// ```
+    /// The wikipedia article explains a lot better: https://en.wikipedia.org/wiki/Levenshtein_distance
     fn calculate(&mut self) -> usize {
         self.process_actions(0, 0) as usize
     }
 
+    /// Implementation of the algorithm described in [`calculate`] using a dynamic programming approach
     fn process_actions(&mut self, pos1: usize, pos2: usize) -> i64 {
         if pos1 == self.s1.len() || pos2 == self.s2.len() {
             // End of both
@@ -29,15 +53,29 @@ impl<'a> Levenshtein<'a> {
             return self.dp[idx];
         }
 
-        if self.s1[pos1] == self.s2[pos2] {
+        if Self::similar(self.s1[pos1], self.s2[pos2]) {
             return self.process_actions(pos1 + 1, pos2 + 1);
         }
 
+        // TODO: Do not take into account things like repeated spaces
         return self
             .process_actions(pos1 + 1, pos2)
             .min(self.process_actions(pos1, pos2 + 1))
             .min(self.process_actions(pos1 + 1, pos2 + 1))
             + 1;
+    }
+
+    fn similar(c1: char, c2: char) -> bool {
+        // No need for it to be fully a equivalence relation lmao
+        c1 == c2
+            || Self::matches(c1, c2, ' ', '-')
+            || Self::matches(c1, c2, ' ', '_')
+            || Self::matches(c1, c2, ' ', '\t')
+            || Self::matches(c1, c2, '-', '_')
+    }
+
+    fn matches(c1: char, c2: char, cc1: char, cc2: char) -> bool {
+        c1 == cc1 && c2 == cc2 || c1 == cc2 && c2 == cc1
     }
 
     /// Get the index at the vector
@@ -47,13 +85,29 @@ impl<'a> Levenshtein<'a> {
 }
 
 pub fn search<'a>(term: &str, lst: &[&'a str]) -> Vec<f64> {
-    todo!()
+    let term: Vec<char> = term.chars().collect();
+
+    let mut res = Vec::new();
+    for other in lst {
+        let other: Vec<char> = other.chars().collect();
+
+        let (dist, max) = (
+            Levenshtein::new(&term, &other).calculate(),
+            term.len().max(other.len()),
+        );
+
+        res.push(if max == 0 {
+            0f64
+        } else {
+            dist as f64 / (max as f64)
+        });
+    }
+    res
 }
 
 mod tests {
-    use core::iter::Iterator;
-
     use crate::fuzzy::Levenshtein;
+    use core::iter::Iterator;
 
     #[test]
     fn basic() {
@@ -124,6 +178,15 @@ mod tests {
             Levenshtein::new(
                 &"firefox".chars().collect::<Vec<_>>(),
                 &"find fox".chars().collect::<Vec<_>>(),
+            ) // n->r, r->d,
+            .calculate(),
+            3
+        );
+
+        assert_eq!(
+            Levenshtein::new(
+                &"firefox-idk".chars().collect::<Vec<_>>(),
+                &"firefox_idk".chars().collect::<Vec<_>>(),
             ) // n->r, r->d,
             .calculate(),
             3
