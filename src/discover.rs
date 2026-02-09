@@ -1,14 +1,77 @@
-use core::{convert::From, ffi::CStr};
+use core::convert::From;
 use std::{
-    ffi::OsStr,
+    ffi::{CStr, CString, OsStr, OsString},
     fs::{DirEntry, File},
     io::Read,
     os::unix::ffi::OsStrExt,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
-use anyhow::bail;
-use home_dir::HomeDirExt;
+use libc::getuid;
+
+fn user_home() -> Option<PathBuf> {
+    // first try the environment variable
+    if let Some(var) = std::env::var_os("HOME") {
+        return Some(PathBuf::from(var));
+    }
+
+    // Else the passwd way
+    unsafe {
+        let res = libc::getpwuid(getuid());
+
+        if res.is_null() || (*res).pw_dir.is_null() {
+            None
+        } else {
+            let s: &[u8] = CStr::from_ptr((*res).pw_dir).to_bytes();
+            Some(PathBuf::from(OsStr::from_bytes(s)).into())
+        }
+    }
+}
+
+fn user_home_of(name: &[u8]) -> Option<PathBuf> {
+    // same as above
+    unsafe {
+        let name = CString::new(name).ok()?;
+        let res = libc::getpwnam(name.as_ptr());
+
+        if res.is_null() || (*res).pw_dir.is_null() {
+            None
+        } else {
+            let s: &[u8] = CStr::from_ptr((*res).pw_dir).to_bytes();
+            Some(PathBuf::from(OsStr::from_bytes(s)).into())
+        }
+    }
+}
+
+fn expand_home(path: PathBuf) -> PathBuf {
+    let mut res = PathBuf::new();
+
+    let mut comps = path.as_path().components();
+    match comps.next() {
+        Some(Component::Normal(s)) => {
+            let s_bytes = s.as_bytes();
+            if s_bytes == b"~"
+                && let Some(homedir) = user_home()
+            {
+                res.push(homedir);
+            } else if s_bytes.starts_with(b"~")
+                && let Some(homedir) = user_home_of(&s_bytes[1..])
+            {
+                res.push(homedir);
+            } else {
+                res.push(Component::Normal(s));
+            }
+        }
+        Some(p) => res.push(p),
+        Option::None => (),
+    }
+
+    for com in comps {
+        res.push(com);
+    }
+
+    res
+}
 
 /// Get the XDG data directories from the environment or return the default ones
 fn xdg_data_dirs() -> Vec<String> {
@@ -39,7 +102,7 @@ pub fn desktop_apps() -> Vec<DesktopEntry> {
     let mut apps = Vec::new();
     for dir in xdg_data_dirs() {
         let fullpath = PathBuf::from(format!("{dir}/applications"));
-        let fullpath = fullpath.expand_home().unwrap_or(fullpath);
+        let fullpath = expand_home(fullpath);
         log::debug!("Checking directory '{fullpath:?}' for desktop entries");
         let files = match std::fs::read_dir(fullpath) {
             Ok(dirs) => dirs,
@@ -85,7 +148,7 @@ pub fn desktop_apps() -> Vec<DesktopEntry> {
     apps
 }
 
-fn parse_desktop_file(path: PathBuf) -> anyhow::Result<Option<DesktopEntry>> {
+fn parse_desktop_file(path: PathBuf) -> Result<Option<DesktopEntry>, Box<dyn std::error::Error>> {
     log::debug!("Parsing file: {path:?}");
     // First read the file
     let mut content = Vec::new();
