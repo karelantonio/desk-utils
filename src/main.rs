@@ -51,26 +51,36 @@ impl Default for App {
 }
 
 impl App {
+    fn do_fuzzy_search(&mut self, txt: &str) {
+        // Perform a search if are different
+        // There are not a lot of entries, so the O(n*maxlen*k) runtime is negligible
+        let mapped: Vec<&[char]> = self.strings.iter().map(|v| v.as_slice()).collect();
+        let term: Vec<char> = txt.chars().collect();
+
+        let mut res: Vec<(f64, usize)> = (0..self.entries.len()).map(|v| (1f64, v)).collect();
+
+        for val in fuzzy::search_in_chars(&term, &mapped)
+            .iter()
+            .enumerate()
+            .map(|(i, &v)| (v, i / 2))
+        {
+            if let Some(Ordering::Greater) = res[val.1].0.partial_cmp(&val.0) {
+                res[val.1].0 = val.0;
+            }
+        }
+        res.sort_by(|f1, f2| match f1.partial_cmp(f2) {
+            Some(val) => val,
+            Option::None => Ordering::Equal,
+        });
+        self.results = res;
+    }
+
     fn update(&mut self, msg: Msg) {
         match msg {
             Msg::SearchTextChanged(txt) => {
                 self.results.clear();
                 if txt.len() > 0 {
-                    // Perform a search if are different
-                    // There are not a lot of entries, so the O(n*maxlen*k) runtime is negligible
-                    let mapped: Vec<&[char]> = self.strings.iter().map(|v| v.as_slice()).collect();
-                    let term: Vec<char> = txt.chars().collect();
-                    let mut res: Vec<(f64, usize)> = fuzzy::search_in_chars(&term, &mapped)
-                        .iter()
-                        .enumerate()
-                        .map(|(i, &v)| (v, i))
-                        .collect();
-                    // Now sort by the float
-                    res.sort_by(|a, b| match a.partial_cmp(b) {
-                        Some(val) => val,
-                        Option::None => Ordering::Equal,
-                    });
-                    self.results.extend(&res);
+                    self.do_fuzzy_search(&txt);
                 }
                 self.search_text = txt;
             }
@@ -81,7 +91,7 @@ impl App {
         text(format!(
             "{:.0} - {}",
             (1.0 - perc) * 100.0,
-            self.entries[idx / 2].name
+            self.entries[*idx].name
         ))
         .into()
     }
