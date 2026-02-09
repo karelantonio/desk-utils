@@ -1,18 +1,22 @@
+use core::default::Default;
+
 use env_logger::Env;
 use iced::{
     Element,
     widget::{column, text_input},
 };
 
+use crate::discover::{DesktopEntry, desktop_apps};
+
 mod discover;
+mod fuzzy;
 
 fn main() -> iced::Result {
     env_logger::init_from_env(
         Env::new()
-            .filter_or("TYLA_LOG", "info")
+            .filter_or("TYLA_LOG", "warn")
             .write_style("TYLA_LOG_STYLE"),
     );
-    discover::desktop_apps();
     iced::run(App::update, App::view)
 }
 
@@ -21,9 +25,19 @@ enum Msg {
     SearchTextChanged(String),
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 struct App {
     search_text: String,
+    entries: Vec<DesktopEntry>,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        Self {
+            search_text: Default::default(),
+            entries: desktop_apps(),
+        }
+    }
 }
 
 impl App {
