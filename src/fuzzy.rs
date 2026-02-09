@@ -53,16 +53,19 @@ impl<'a> Levenshtein<'a> {
             return self.dp[idx];
         }
 
-        if Self::similar(self.s1[pos1], self.s2[pos2]) {
-            return self.process_actions(pos1 + 1, pos2 + 1);
-        }
+        let res = if Self::similar(self.s1[pos1], self.s2[pos2]) {
+            self.process_actions(pos1 + 1, pos2 + 1)
+        } else {
+            // TODO: Do not take into account things like repeated spaces
+            self.process_actions(pos1 + 1, pos2)
+                .min(self.process_actions(pos1, pos2 + 1))
+                .min(self.process_actions(pos1 + 1, pos2 + 1))
+                + 1
+        };
 
-        // TODO: Do not take into account things like repeated spaces
-        return self
-            .process_actions(pos1 + 1, pos2)
-            .min(self.process_actions(pos1, pos2 + 1))
-            .min(self.process_actions(pos1 + 1, pos2 + 1))
-            + 1;
+        self.dp[idx] = res;
+
+        res
     }
 
     fn similar(c1: char, c2: char) -> bool {
@@ -86,11 +89,14 @@ impl<'a> Levenshtein<'a> {
 
 pub fn search<'a>(term: &str, lst: &[&'a str]) -> Vec<f64> {
     let term: Vec<char> = term.chars().collect();
+    let mapped: Vec<Vec<char>> = lst.iter().map(|s| s.chars().collect()).collect();
+    let as_slices: Vec<&[char]> = mapped.iter().map(Vec::as_slice).collect();
+    search_in_chars(&term, &as_slices)
+}
 
+pub fn search_in_chars<'a>(term: &[char], lst: &[&'a [char]]) -> Vec<f64> {
     let mut res = Vec::new();
-    for other in lst {
-        let other: Vec<char> = other.chars().collect();
-
+    for &other in lst {
         let (dist, max) = (
             Levenshtein::new(&term, &other).calculate(),
             term.len().max(other.len()),
