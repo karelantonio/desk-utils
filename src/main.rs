@@ -1,11 +1,15 @@
 use crate::discover::{DesktopEntry, desktop_apps};
-use core::{cmp::Ordering, default::Default};
+use core::{cmp::Ordering, default::Default, include_bytes};
 use env_logger::Env;
 use iced::{
-    Color, Element, Length, Padding, Task, Theme,
+    Color, Element, Font, Length, Padding, Task, Theme,
     border::radius,
-    color,
-    widget::{Id, column, container, operation, scrollable, text, text_input},
+    color, font,
+    widget::{
+        Id, column, container,
+        operation::{self, focus},
+        row, scrollable, space, text, text_input,
+    },
 };
 
 mod discover;
@@ -25,7 +29,9 @@ fn main() -> iced::Result {
 
 #[derive(Debug, Clone)]
 enum Msg {
+    FontLoaded,
     SearchTextChanged(String),
+    CouldNotLoadFont(font::Error),
 }
 
 #[derive(Debug)]
@@ -36,6 +42,12 @@ struct App {
     results: Vec<(f64, usize)>,
     search_box_id: Id,
 }
+
+const SEARCH: char = '\u{E65F}';
+const PLAY: char = '\u{E6B9}';
+const RIGHT_ARROW: char = '\u{E89B}';
+const DOLLAR: char = '\u{E769}';
+const RELOAD: char = '\u{E8A4}';
 
 impl Default for App {
     fn default() -> Self {
@@ -59,7 +71,17 @@ impl App {
     fn new() -> (Self, Task<Msg>) {
         let slf = Self::default();
         let id = slf.search_box_id.clone();
-        (slf, operation::focus(id))
+        (
+            slf,
+            font::load(include_bytes!("./icons.ttf"))
+                .then(|res| {
+                    Task::done(match res {
+                        Ok(()) => Msg::FontLoaded,
+                        Err(err) => Msg::CouldNotLoadFont(err),
+                    })
+                })
+                .chain(focus(id)),
+        )
     }
 
     fn theme(&self) -> Theme {
@@ -99,11 +121,22 @@ impl App {
                 }
                 self.search_text = txt;
             }
+            Msg::FontLoaded => {
+                // Nothing to do
+                log::debug!("Font file loaded successfully");
+            }
+            Msg::CouldNotLoadFont(_err) => {
+                log::error!("Could not load font for icons");
+            }
         }
     }
 
     fn search_box(&self) -> impl Into<Element<'_, Msg>> {
-        container(
+        container(row![
+            text(SEARCH)
+                .font(Font::with_name("Material-Design-Icons"))
+                .size(24.0.dp()),
+            space().width(16.0.dp()),
             text_input("Search term here...", &self.search_text)
                 .on_input(Msg::SearchTextChanged)
                 .width(Length::Fill)
@@ -116,12 +149,12 @@ impl App {
                     }
                 })
                 .id(self.search_box_id.clone()),
-        )
+        ])
         .padding(Padding {
-            top: 16.0,
-            right: 16.0,
-            bottom: 16.0,
-            left: 16.0,
+            top: 13.0.dp(),
+            right: 13.0.dp(),
+            bottom: 13.0.dp(),
+            left: 13.0.dp(),
         })
         .style(|theme| {
             let palette = theme.extended_palette();
@@ -132,7 +165,7 @@ impl App {
                 border: iced::Border {
                     color: color!(0),
                     width: 0.0,
-                    radius: radius(28),
+                    radius: radius(28.0.dp()),
                 },
                 ..Default::default()
             }
@@ -155,5 +188,15 @@ impl App {
                 .width(Length::Fill)
         ]
         .into()
+    }
+}
+
+trait DpExt {
+    fn dp(&self) -> f32;
+}
+
+impl DpExt for f32 {
+    fn dp(&self) -> f32 {
+        *self
     }
 }

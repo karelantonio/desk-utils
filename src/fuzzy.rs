@@ -82,6 +82,7 @@ impl<'a> Levenshtein<'a> {
             || Self::matches(c1, c2, ' ', '_')
             || Self::matches(c1, c2, ' ', '\t')
             || Self::matches(c1, c2, '-', '_')
+            || c1.to_ascii_lowercase() == c2.to_ascii_lowercase()
     }
 
     fn matches(c1: char, c2: char, cc1: char, cc2: char) -> bool {
