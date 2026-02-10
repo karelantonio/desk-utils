@@ -1,10 +1,3 @@
-[package]
-name = "tyla"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-env_logger = { version = "0.11.8", default-features = false }
-iced = { version = "0.14.0", default-features = false, features = ["x11", "wayland", "wgpu", "tokio"] }
-libc = "0.2.180"
-log = "0.4.29"
+[workspace]
+resolver = "3"
+members = ["tyla"]
