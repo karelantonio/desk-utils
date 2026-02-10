@@ -149,6 +149,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "bright"
+version = "1.0.0"
+
+[[package]]
 name = "bumpalo"
 version = "3.19.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
