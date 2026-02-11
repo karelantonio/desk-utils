@@ -11,6 +11,7 @@ use iced::{
         row, scrollable, space, text, text_input,
     },
 };
+use std::process::Command;
 
 mod discover;
 mod fuzzy;
@@ -37,6 +38,7 @@ enum Msg {
     EscapePressed,
     UpPressed,
     DownPressed,
+    CtrlEnterPressed,
 }
 
 #[derive(Debug)]
@@ -47,6 +49,7 @@ struct App {
     results: Vec<(f64, usize)>,
     search_box_id: Id,
     selected_idx: usize,
+    exec_error: Option<String>,
 }
 
 const SEARCH: char = '\u{E65F}';
@@ -70,6 +73,7 @@ impl Default for App {
             results: Vec::new(),
             search_box_id: Id::new("search_box"),
             selected_idx: 0,
+            exec_error: None,
         }
     }
 }
@@ -114,6 +118,17 @@ impl App {
                 location: _,
                 modifiers: _,
             } => Some(Msg::DownPressed),
+            keyboard::Event::KeyReleased {
+                key: keyboard::Key::Named(keyboard::key::Named::Enter),
+                modified_key: _,
+                physical_key: _,
+                location: _,
+                modifiers,
+            } => Some(if modifiers.control() {
+                Msg::CtrlEnterPressed
+            } else {
+                Msg::EnterPressed
+            }),
             _ => None,
         })
     }
@@ -183,6 +198,16 @@ impl App {
                     self.selected_idx += 1;
                 }
             }
+            Msg::CtrlEnterPressed => {
+                if self.search_text.len() > 0 {
+                    if let Err(err) = Command::new(self.search_text.clone()).spawn() {
+                        log::error!("Could not spawn child: {err}");
+                        self.exec_error = Some(format!("Could not spawn child: {err}"));
+                    } else {
+                        return iced::exit();
+                    }
+                }
+            }
         }
 
         Task::none()
@@ -195,7 +220,6 @@ impl App {
                 .size(24.0.dp()),
             space().width(16.0.dp()),
             text_input("Search term here...", &self.search_text)
-                .on_submit(Msg::EnterPressed)
                 .on_input(Msg::SearchTextChanged)
                 .width(Length::Fill)
                 .style(|thm, st| {
