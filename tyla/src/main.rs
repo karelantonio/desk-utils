@@ -160,7 +160,7 @@ impl App {
             Some(val) => val,
             Option::None => Ordering::Equal,
         });
-        self.results = res;
+        self.results.extend(&res[..10]);
     }
 
     fn update(&mut self, msg: Msg) -> Task<Msg> {
@@ -369,9 +369,12 @@ impl App {
     fn result_item(&self, ridx: usize, (_perc, idx): &(f64, usize)) -> Element<'_, Msg> {
         let elem = &self.entries[*idx];
         let is_selected = matches!(&self.selected_idx, Some((idx, _)) if *idx == ridx);
-        let cont = container(text(format!("{idx:03} - {}", elem.name)))
-            .padding(8)
-            .width(Length::Fill);
+        let cont = container(column![
+            text(&elem.name).style(text::primary),
+            text(&elem.cmd).style(text::secondary)
+        ])
+        .padding(8)
+        .width(Length::Fill);
         let cont = if is_selected {
             cont.style(|_thm| container::Style {
                 background: Some(Background::Color(color!(0x101418))),
