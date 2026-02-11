@@ -164,6 +164,7 @@ impl App {
     fn update(&mut self, msg: Msg) -> Task<Msg> {
         match msg {
             Msg::SearchTextChanged(txt) => {
+                self.exec_error = None;
                 self.results.clear();
                 self.selected_idx = 0;
                 if txt.len() > 0 {
@@ -272,11 +273,38 @@ impl App {
         cont.into()
     }
 
+    fn error_message(&self) -> Element<'_, Msg> {
+        let colors = self.theme().extended_palette().warning;
+        if let Some(ref txt) = self.exec_error {
+            container(
+                container(text(txt).color(colors.base.text))
+                    .style(move |thm| {
+                        let colors = colors.clone();
+                        container::Style {
+                            background: Some(Background::Color(colors.base.color.clone())),
+                            border: iced::Border {
+                                color: colors.base.color,
+                                width: 2.0,
+                                radius: radius(8),
+                            },
+                            ..Default::default()
+                        }
+                    })
+                    .padding(14)
+                    .width(Length::Fill),
+            )
+            .padding(8)
+            .into()
+        } else {
+            space().into()
+        }
+    }
+
     fn view(&self) -> Element<'_, Msg> {
         column![
             container(self.search_box()).padding(8),
             scrollable(
-                column![].extend(
+                column![].push(self.error_message()).extend(
                     self.results
                         .iter()
                         .enumerate()
