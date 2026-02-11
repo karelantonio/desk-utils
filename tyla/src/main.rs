@@ -185,6 +185,20 @@ impl App {
                     // Quit
                     return iced::exit();
                 }
+                // Split the text into the arguments
+                let args = shlex::Shlex::new(&self.search_text).collect::<Vec<_>>();
+                log::info!("Executing: {args:?}");
+                let mut args = args.into_iter().map(|s| OsString::from(s));
+                if let Some(name) = args.next() {
+                    if let Err(err) = Command::new(name).args(args).spawn() {
+                        log::error!("Could not spawn child: {err}");
+                        self.exec_error = Some(format!("Could not spawn child: {err}"));
+                    } else {
+                        return iced::exit();
+                    }
+                } else {
+                    self.exec_error = Some("No command to execute (String is empty)".into());
+                };
             }
             Msg::EscapePressed => {
                 return iced::exit();
@@ -234,22 +248,19 @@ impl App {
                 }
             }
             Msg::CtrlEnterPressed => {
-                if self.search_text.len() > 0 {
-                    // Split the text into the arguments
-                    let args = shlex::Shlex::new(&self.search_text).collect::<Vec<_>>();
-                    log::info!("Executing: {args:?}");
-                    let mut args = args.into_iter().map(|s| OsString::from(s));
-                    if let Some(name) = args.next() {
-                        if let Err(err) = Command::new(name).args(args).spawn() {
-                            log::error!("Could not spawn child: {err}");
-                            self.exec_error = Some(format!("Could not spawn child: {err}"));
-                        } else {
-                            return iced::exit();
-                        }
+                let args = vec!["/bin/sh".into(), "-c".into(), self.search_text.clone()];
+                log::info!("Executing in shell: {args:?}");
+                let mut args = args.into_iter().map(|s| OsString::from(s));
+                if let Some(name) = args.next() {
+                    if let Err(err) = Command::new(name).args(args).spawn() {
+                        log::error!("Could not spawn child: {err}");
+                        self.exec_error = Some(format!("Could not spawn child: {err}"));
                     } else {
-                        self.exec_error = Some("No command to execute (String is empty)".into());
-                    };
-                }
+                        return iced::exit();
+                    }
+                } else {
+                    self.exec_error = Some("No command to execute (String is empty)".into());
+                };
             }
         }
 
@@ -261,7 +272,7 @@ impl App {
             text(SEARCH)
                 .font(Font::with_name("Material-Design-Icons"))
                 .size(24.0),
-            space().width(16.0),
+            space().width(12.0),
             text_input("Search term here...", &self.search_text)
                 .on_input(Msg::SearchTextChanged)
                 .width(Length::Fill)
@@ -276,9 +287,9 @@ impl App {
                 .id(self.search_box_id.clone()),
         ])
         .padding(Padding {
-            top: 13.0,
-            right: 13.0,
-            bottom: 13.0,
+            top: 8.0,
+            right: 8.0,
+            bottom: 8.0,
             left: 13.0,
         })
         .style(|theme| {
@@ -290,7 +301,7 @@ impl App {
                 border: iced::Border {
                     color: color!(0),
                     width: 0.0,
-                    radius: radius(28.0),
+                    radius: radius(14.0),
                 },
                 ..Default::default()
             }
