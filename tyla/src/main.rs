@@ -11,7 +11,7 @@ use iced::{
         row, scrollable, space, text, text_input,
     },
 };
-use std::process::Command;
+use std::{ffi::OsString, process::Command};
 
 mod discover;
 mod fuzzy;
@@ -235,12 +235,20 @@ impl App {
             }
             Msg::CtrlEnterPressed => {
                 if self.search_text.len() > 0 {
-                    if let Err(err) = Command::new(self.search_text.clone()).spawn() {
-                        log::error!("Could not spawn child: {err}");
-                        self.exec_error = Some(format!("Could not spawn child: {err}"));
+                    // Split the text into the arguments
+                    let args = shlex::Shlex::new(&self.search_text).collect::<Vec<_>>();
+                    log::info!("Executing: {args:?}");
+                    let mut args = args.into_iter().map(|s| OsString::from(s));
+                    if let Some(name) = args.next() {
+                        if let Err(err) = Command::new(name).args(args).spawn() {
+                            log::error!("Could not spawn child: {err}");
+                            self.exec_error = Some(format!("Could not spawn child: {err}"));
+                        } else {
+                            return iced::exit();
+                        }
                     } else {
-                        return iced::exit();
-                    }
+                        self.exec_error = Some("No command to execute (String is empty)".into());
+                    };
                 }
             }
         }

@@ -2435,6 +2435,7 @@ dependencies = [
  "iced",
  "libc",
  "log",
+ "shlex",
 ]
 
 [[package]]
