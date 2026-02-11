@@ -1,14 +1,16 @@
 use crate::discover::{DesktopEntry, desktop_apps};
-use core::{cmp::Ordering, default::Default, include_bytes, option::Option::None};
+use core::{
+    cmp::Ordering, convert::TryInto, default::Default, include_bytes, option::Option::None,
+};
 use env_logger::Env;
 use iced::{
     Background, Color, Element, Font, Length, Padding, Subscription, Task, Theme,
     border::radius,
     color, font, keyboard,
     widget::{
-        Id, column, container,
+        Id, button, column, container,
         operation::{self, focus},
-        row, scrollable, space, text, text_input,
+        row, scrollable, space, text, text_input, tooltip,
     },
 };
 use std::{ffi::OsString, process::Command};
@@ -268,10 +270,34 @@ impl App {
     }
 
     fn search_box(&self) -> impl Into<Element<'_, Msg>> {
+        let mdfont = Font::with_name("Material-Design-Icons");
+
+        let text_button = {
+            let mdfont = mdfont.clone();
+            |thm: &Theme, st: button::Status| {
+                let ext = thm.extended_palette();
+                match st {
+                    button::Status::Pressed => button::Style {
+                        background: Some(Background::Color(ext.background.strong.color)),
+                        ..Default::default()
+                    },
+                    button::Status::Hovered => button::Style {
+                        background: Some(Background::Color(ext.background.neutral.color)),
+                        ..Default::default()
+                    },
+                    _ => button::Style {
+                        background: Some(Background::Color(ext.background.weak.color)),
+                        ..Default::default()
+                    },
+                }
+            }
+        };
+
         container(row![
             text(SEARCH)
-                .font(Font::with_name("Material-Design-Icons"))
-                .size(24.0),
+                .font(mdfont.clone())
+                .size(24.0)
+                .style(text::default),
             space().width(12.0),
             text_input("Search term here...", &self.search_text)
                 .on_input(Msg::SearchTextChanged)
@@ -285,6 +311,38 @@ impl App {
                     }
                 })
                 .id(self.search_box_id.clone()),
+            space().width(12.0),
+            tooltip(
+                button(
+                    text(RIGHT_ARROW)
+                        .font(mdfont.clone())
+                        .size(24.0)
+                        .style(text::primary)
+                )
+                .on_press(Msg::EnterPressed)
+                .padding(0)
+                .style(button::text),
+                container(text("Run command (Enter)"))
+                    .padding(10)
+                    .style(container::rounded_box),
+                tooltip::Position::Bottom
+            ),
+            space().width(12.0),
+            tooltip(
+                button(
+                    text(DOLLAR)
+                        .font(mdfont.clone())
+                        .size(24.0)
+                        .style(text::primary)
+                )
+                .on_press(Msg::CtrlEnterPressed)
+                .padding(0)
+                .style(button::text),
+                container(text("Run command in shell (Ctrl+Enter)"))
+                    .padding(10)
+                    .style(container::rounded_box),
+                tooltip::Position::Bottom
+            ),
         ])
         .padding(Padding {
             top: 8.0,
@@ -331,14 +389,14 @@ impl App {
         if let Some(ref txt) = self.exec_error {
             container(
                 container(text(txt).color(colors.base.text))
-                    .style(move |thm| {
+                    .style(move |_thm| {
                         let colors = colors.clone();
                         container::Style {
                             background: Some(Background::Color(colors.base.color.clone())),
                             border: iced::Border {
                                 color: colors.base.color,
                                 width: 2.0,
-                                radius: radius(8),
+                                radius: radius(14),
                             },
                             ..Default::default()
                         }
