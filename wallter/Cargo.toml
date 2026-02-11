@@ -1,0 +1,7 @@
+[package]
+name = "wallter"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+smithay-client-toolkit = { version = "0.20.0", default-features = false }
