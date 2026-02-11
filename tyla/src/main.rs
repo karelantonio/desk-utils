@@ -1,5 +1,5 @@
 use crate::discover::{DesktopEntry, desktop_apps};
-use core::{cmp::Ordering, default::Default, include_bytes};
+use core::{cmp::Ordering, default::Default, include_bytes, option::Option::None};
 use env_logger::Env;
 use iced::{
     Background, Color, Element, Font, Length, Padding, Subscription, Task, Theme,
@@ -48,7 +48,7 @@ struct App {
     strings: Vec<Vec<char>>,
     results: Vec<(f64, usize)>,
     search_box_id: Id,
-    selected_idx: usize,
+    selected_idx: Option<(usize, String)>,
     exec_error: Option<String>,
 }
 
@@ -72,7 +72,7 @@ impl Default for App {
             strings,
             results: Vec::new(),
             search_box_id: Id::new("search_box"),
-            selected_idx: 0,
+            selected_idx: None,
             exec_error: None,
         }
     }
@@ -166,7 +166,7 @@ impl App {
             Msg::SearchTextChanged(txt) => {
                 self.exec_error = None;
                 self.results.clear();
-                self.selected_idx = 0;
+                self.selected_idx = None;
                 if txt.len() > 0 {
                     self.do_fuzzy_search(&txt);
                 }
@@ -190,13 +190,47 @@ impl App {
                 return iced::exit();
             }
             Msg::UpPressed => {
-                if self.selected_idx > 0 {
-                    self.selected_idx -= 1;
+                let idx = std::mem::take(&mut self.selected_idx);
+                self.selected_idx = match idx {
+                    Some((0, s)) => {
+                        self.search_text = s;
+                        None
+                    }
+                    Some((idx, s)) => {
+                        self.search_text = self.entries[self.results[idx - 1].1].cmd.clone();
+                        Some((idx - 1, s))
+                    }
+                    None if self.results.len() == 0 => None,
+                    None => {
+                        let newidx = self.results.len() - 1;
+                        let old = std::mem::replace(
+                            &mut self.search_text,
+                            self.entries[self.results[newidx].1].cmd.clone(),
+                        );
+                        Some((newidx, old))
+                    }
                 }
             }
             Msg::DownPressed => {
-                if self.selected_idx + 1 < self.results.len() {
-                    self.selected_idx += 1;
+                let idx = std::mem::take(&mut self.selected_idx);
+                self.selected_idx = match idx {
+                    Some((idx, s)) => {
+                        if idx == self.results.len() - 1 {
+                            None
+                        } else {
+                            self.search_text = self.entries[self.results[idx + 1].1].cmd.clone();
+                            Some((idx + 1, s))
+                        }
+                    }
+                    None if self.results.len() == 0 => None,
+                    None => {
+                        let newidx = 0;
+                        let old = std::mem::replace(
+                            &mut self.search_text,
+                            self.entries[self.results[newidx].1].cmd.clone(),
+                        );
+                        Some((newidx, old))
+                    }
                 }
             }
             Msg::CtrlEnterPressed => {
@@ -218,8 +252,8 @@ impl App {
         container(row![
             text(SEARCH)
                 .font(Font::with_name("Material-Design-Icons"))
-                .size(24.0.dp()),
-            space().width(16.0.dp()),
+                .size(24.0),
+            space().width(16.0),
             text_input("Search term here...", &self.search_text)
                 .on_input(Msg::SearchTextChanged)
                 .width(Length::Fill)
@@ -234,10 +268,10 @@ impl App {
                 .id(self.search_box_id.clone()),
         ])
         .padding(Padding {
-            top: 13.0.dp(),
-            right: 13.0.dp(),
-            bottom: 13.0.dp(),
-            left: 13.0.dp(),
+            top: 13.0,
+            right: 13.0,
+            bottom: 13.0,
+            left: 13.0,
         })
         .style(|theme| {
             let palette = theme.extended_palette();
@@ -248,7 +282,7 @@ impl App {
                 border: iced::Border {
                     color: color!(0),
                     width: 0.0,
-                    radius: radius(28.0.dp()),
+                    radius: radius(28.0),
                 },
                 ..Default::default()
             }
@@ -257,7 +291,7 @@ impl App {
 
     fn result_item(&self, ridx: usize, (_perc, idx): &(f64, usize)) -> Element<'_, Msg> {
         let elem = &self.entries[*idx];
-        let is_selected = self.selected_idx == ridx;
+        let is_selected = matches!(&self.selected_idx, Some((idx, _)) if *idx == ridx);
         let cont = container(text(format!("{idx:03} - {}", elem.name)))
             .padding(8)
             .width(Length::Fill);
@@ -314,15 +348,5 @@ impl App {
             .width(Length::Fill)
         ]
         .into()
-    }
-}
-
-trait DpExt {
-    fn dp(&self) -> f32;
-}
-
-impl DpExt for f32 {
-    fn dp(&self) -> f32 {
-        *self
     }
 }
