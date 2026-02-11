@@ -204,11 +204,24 @@ fn parse_desktop_file(path: PathBuf) -> Result<Option<DesktopEntry>, Box<dyn std
         } else if bname == b"Terminal" {
             terminal = bvalue == b"true";
         } else if bname == b"Exec" {
-            if bvalue.contains(&b'%') {
-                // Not supported rn :(, implement later
-                continue;
+            // Lets just apply the repression technk. and ignore all the %u, %f... bs
+            let mut bld = Vec::new();
+            let mut segs = bvalue.split(|&c| c == b'%');
+            if let Some(v) = segs.next() {
+                bld.extend(v);
             }
-            cmd = Some(String::from_utf8(bvalue.into())?);
+            for seg in segs {
+                if seg.len() == 0 {
+                    continue;
+                }
+
+                if seg[0] == b'%' {
+                    bld.extend(seg);
+                } else {
+                    bld.extend(&seg[1..]);
+                }
+            }
+            cmd = Some(String::from_utf8(bld)?);
         }
     }
 

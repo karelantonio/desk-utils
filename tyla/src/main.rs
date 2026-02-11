@@ -2,9 +2,9 @@ use crate::discover::{DesktopEntry, desktop_apps};
 use core::{cmp::Ordering, default::Default, include_bytes};
 use env_logger::Env;
 use iced::{
-    Color, Element, Font, Length, Padding, Task, Theme,
+    Background, Color, Element, Font, Length, Padding, Subscription, Task, Theme,
     border::radius,
-    color, font,
+    color, font, keyboard,
     widget::{
         Id, column, container,
         operation::{self, focus},
@@ -24,6 +24,7 @@ fn main() -> iced::Result {
     iced::application(App::new, App::update, App::view)
         .title("Tiny Launcher")
         .theme(App::theme)
+        .subscription(App::subscription)
         .run()
 }
 
@@ -32,6 +33,10 @@ enum Msg {
     FontLoaded,
     SearchTextChanged(String),
     CouldNotLoadFont(font::Error),
+    EnterPressed,
+    EscapePressed,
+    UpPressed,
+    DownPressed,
 }
 
 #[derive(Debug)]
@@ -41,6 +46,7 @@ struct App {
     strings: Vec<Vec<char>>,
     results: Vec<(f64, usize)>,
     search_box_id: Id,
+    selected_idx: usize,
 }
 
 const SEARCH: char = '\u{E65F}';
@@ -63,6 +69,7 @@ impl Default for App {
             strings,
             results: Vec::new(),
             search_box_id: Id::new("search_box"),
+            selected_idx: 0,
         }
     }
 }
@@ -82,6 +89,33 @@ impl App {
                 })
                 .chain(focus(id)),
         )
+    }
+
+    fn subscription(&self) -> Subscription<Msg> {
+        keyboard::listen().filter_map(|k: keyboard::Event| match k {
+            keyboard::Event::KeyReleased {
+                key: keyboard::Key::Named(keyboard::key::Named::Escape),
+                modified_key: _,
+                physical_key: _,
+                location: _,
+                modifiers: _,
+            } => Some(Msg::EscapePressed),
+            keyboard::Event::KeyReleased {
+                key: keyboard::Key::Named(keyboard::key::Named::ArrowUp),
+                modified_key: _,
+                physical_key: _,
+                location: _,
+                modifiers: _,
+            } => Some(Msg::UpPressed),
+            keyboard::Event::KeyReleased {
+                key: keyboard::Key::Named(keyboard::key::Named::ArrowDown),
+                modified_key: _,
+                physical_key: _,
+                location: _,
+                modifiers: _,
+            } => Some(Msg::DownPressed),
+            _ => None,
+        })
     }
 
     fn theme(&self) -> Theme {
@@ -112,10 +146,11 @@ impl App {
         self.results = res;
     }
 
-    fn update(&mut self, msg: Msg) {
+    fn update(&mut self, msg: Msg) -> Task<Msg> {
         match msg {
             Msg::SearchTextChanged(txt) => {
                 self.results.clear();
+                self.selected_idx = 0;
                 if txt.len() > 0 {
                     self.do_fuzzy_search(&txt);
                 }
@@ -128,7 +163,29 @@ impl App {
             Msg::CouldNotLoadFont(_err) => {
                 log::error!("Could not load font for icons");
             }
+            Msg::EnterPressed => {
+                // If term is empty then return
+                if self.search_text.len() == 0 {
+                    // Quit
+                    return iced::exit();
+                }
+            }
+            Msg::EscapePressed => {
+                return iced::exit();
+            }
+            Msg::UpPressed => {
+                if self.selected_idx > 0 {
+                    self.selected_idx -= 1;
+                }
+            }
+            Msg::DownPressed => {
+                if self.selected_idx + 1 < self.results.len() {
+                    self.selected_idx += 1;
+                }
+            }
         }
+
+        Task::none()
     }
 
     fn search_box(&self) -> impl Into<Element<'_, Msg>> {
@@ -138,6 +195,7 @@ impl App {
                 .size(24.0.dp()),
             space().width(16.0.dp()),
             text_input("Search term here...", &self.search_text)
+                .on_submit(Msg::EnterPressed)
                 .on_input(Msg::SearchTextChanged)
                 .width(Length::Fill)
                 .style(|thm, st| {
@@ -172,20 +230,36 @@ impl App {
         })
     }
 
-    fn result_item(&self, (perc, idx): &(f64, usize)) -> Element<'_, Msg> {
-        text(format!(
-            "{:.0} - {}",
-            (1.0 - perc) * 100.0,
-            self.entries[*idx].name
-        ))
-        .into()
+    fn result_item(&self, ridx: usize, (_perc, idx): &(f64, usize)) -> Element<'_, Msg> {
+        let elem = &self.entries[*idx];
+        let is_selected = self.selected_idx == ridx;
+        let cont = container(text(format!("{idx:03} - {}", elem.name)))
+            .padding(8)
+            .width(Length::Fill);
+        let cont = if is_selected {
+            cont.style(|_thm| container::Style {
+                background: Some(Background::Color(color!(0x101418))),
+                ..Default::default()
+            })
+        } else {
+            cont
+        };
+
+        cont.into()
     }
 
     fn view(&self) -> Element<'_, Msg> {
         column![
             container(self.search_box()).padding(8),
-            scrollable(column![].extend(self.results.iter().map(|arg| self.result_item(arg))))
-                .width(Length::Fill)
+            scrollable(
+                column![].extend(
+                    self.results
+                        .iter()
+                        .enumerate()
+                        .map(|(i, arg)| self.result_item(i, arg))
+                )
+            )
+            .width(Length::Fill)
         ]
         .into()
     }
